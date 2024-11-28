@@ -15,13 +15,8 @@ def load_model(filename):
 def predict(model, X):
     return model.predict(X)
 
-def extract_flight(airline):
-    df = pd.read_csv('./datasets/processed_data.csv')
-    flights = df[df['airline'] == airline]['flight'].tolist()
-    return random.choice(flights)
-
 def get_airlines():
-    df = pd.read_csv('./datasets/processed_data.csv')
+    df = pd.read_csv('./datasets/Clean_Dataset.csv')
     return df['airline'].unique().tolist()
 
 def get_time_slot(time):
@@ -79,8 +74,8 @@ def predict_duration(source_city, destination_city, stops):
 
 def get_encodings():
     clean_data = pd.read_csv("./datasets/Clean_Dataset.csv")
-    processed_data = pd.read_csv("./datasets/processed_data.csv")  
-    categorical_columns = ['airline', 'flight', 'departure_time', 'source_city', 'arrival_time', 'destination_city', 'class'] 
+    processed_data = pd.read_csv("./datasets/final_dataset.csv")  
+    categorical_columns = ['departure_time', 'arrival_time', 'class'] 
     encodings = {}
     for column in categorical_columns:
         original_values = clean_data[column].unique()
@@ -92,6 +87,40 @@ def get_encodings():
         })
         encodings[column] = mapping_df
     return encodings
+
+def get_categorical_encodings():
+    categorical_encoding = {}
+    airline_cols = ['airline_AirAsia', 'airline_Air_India', 'airline_GO_FIRST', 'airline_Indigo', 'airline_SpiceJet', 'airline_Vistara']
+    i = 0
+    categorical_encoding['airline'] = {}
+    for airline in airline_cols:
+        l = [0] * len(airline_cols)
+        l[i] = 1
+        i += 1
+        airline = airline.split('airline_')[1]
+        categorical_encoding['airline'][airline] = l
+        
+    source_city_cols = ['source_city_Bangalore', 'source_city_Chennai', 'source_city_Delhi', 'source_city_Hyderabad', 'source_city_Kolkata', 'source_city_Mumbai']
+    i = 0
+    categorical_encoding['source_city'] = {}
+    for city in source_city_cols:
+        l = [0] * len(source_city_cols)
+        l[i] = 1
+        i += 1
+        city = city.split('source_city_')[1]
+        categorical_encoding['source_city'][city] = l
+        
+    destination_city_cols = ['destination_city_Bangalore', 'destination_city_Chennai', 'destination_city_Delhi', 'destination_city_Hyderabad', 'destination_city_Kolkata', 'destination_city_Mumbai']
+    i = 0
+    categorical_encoding['destination_city'] = {}
+    for city in destination_city_cols:
+        l = [0] * len(destination_city_cols)
+        l[i] = 1
+        i += 1
+        city = city.split('destination_city_')[1]
+        categorical_encoding['destination_city'][city] = l
+        
+    return categorical_encoding
 
 def get_encoded_value(class_name, mapping_df):
     encoded_value = mapping_df.loc[mapping_df['Original Value'] == class_name, 'Encoded Value']
@@ -106,12 +135,18 @@ def get_decoded_value(encoded_value, mapping_df):
         return original_value.values[0]
     else:
         return None
+    
+def categorical_encode(data, encodings):
+    return encodings[data]
 
-model = load_model('./models/random_forest.pkl')
+model = load_model('./checkpoint/random_forest.pkl')
 encodings = get_encodings()
+categorical_encodings = get_categorical_encodings()
 airlines = get_airlines()
-src = get_encoded_value(input('Enter source: ').title(), encodings['source_city'])
-dst = get_encoded_value(input('Enter destination: ').title(), encodings['destination_city'])
+src_city = input('Enter source: ').title()
+src = categorical_encode(src_city, categorical_encodings['source_city'])
+dst_city = input('Enter destination: ').title()
+dst = categorical_encode(dst_city, categorical_encodings['destination_city'])
 date_of_departure = input('Enter date of departure [DD/MM/YYYY]: ')
 departure_date = datetime.strptime(date_of_departure, '%d/%m/%Y')
 today_date = datetime.now()
@@ -121,11 +156,17 @@ date_of_arrival = input('Enter date of arrival [DD/MM/YYYY]: ')
 arrival_time = get_encoded_value(get_time_slot(input('Enter arrival time [HH:MM]: ')), encodings['arrival_time'])
 seat_class = get_encoded_value(input('Enter seat class [Economy/Business]: '), encodings['class'])
 stops = min(int(input('Enter number of preferred stops: ')), 2)
-duration = predict_duration(src, dst, stops)
+duration = predict_duration(src_city, dst_city, stops)
 
 data = {}
 
-columns = ['airline', 'flight', 'source_city', 'departure_time', 'stops', 'arrival_time', 'destination_city', 'class', 'duration', 'days_left']
+columns = [
+    "departure_time", "stops", "arrival_time", "class", "duration", "days_left", "airline_AirAsia",
+    "airline_Air_India", "airline_GO_FIRST", "airline_Indigo", "airline_SpiceJet", "airline_Vistara", "source_city_Bangalore",
+    "source_city_Chennai", "source_city_Delhi", "source_city_Hyderabad", "source_city_Kolkata", "source_city_Mumbai", "destination_city_Bangalore",
+    "destination_city_Chennai", "destination_city_Delhi", "destination_city_Hyderabad", "destination_city_Kolkata",
+    "destination_city_Mumbai"
+]
 
 min_price = float('inf')
 best_airline = None
@@ -134,13 +175,11 @@ min_price_day = None
 for i in range(days_left, -1, -1):
     data[i] = {}
     for j in airlines:
-        flight = extract_flight(j)
-        airline = get_encoded_value(j, encodings['airline'])
-        features = [j, flight, src, departure_time, stops, arrival_time, dst, seat_class, duration, i]
+        airline = categorical_encode(j, categorical_encodings['airline'])
+        features = [departure_time, stops, arrival_time, seat_class, duration, i] + airline + src + dst
         features = pd.Series(features, index=columns)
         features = features.values.reshape(1, -1)
         price = predict(model, features)[0]
-        j = get_decoded_value(j, encodings['airline'])
         data[i][j] = price
         if price < min_price:
             min_price = price
