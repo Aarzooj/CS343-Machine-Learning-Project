@@ -75,7 +75,7 @@ def predict_duration(source_city, destination_city, stops):
 def get_encodings():
     clean_data = pd.read_csv("./datasets/Clean_Dataset.csv")
     processed_data = pd.read_csv("./datasets/final_dataset.csv")  
-    categorical_columns = ['departure_time', 'arrival_time', 'class'] 
+    categorical_columns = ['flight', 'departure_time', 'arrival_time', 'class'] 
     encodings = {}
     for column in categorical_columns:
         original_values = clean_data[column].unique()
@@ -139,6 +139,17 @@ def get_decoded_value(encoded_value, mapping_df):
 def categorical_encode(data, encodings):
     return encodings[data]
 
+def extract_flight(airline):
+    d = {
+        'AirAsia': 1213,
+        'Air_India': 878,
+        'GO_FIRST': 1013,
+        'Indigo': 245,
+        'SpiceJet': 1408,
+        'Vistara': 1559
+    }
+    return d[airline]
+
 model = load_model('./checkpoint/random_forest.pkl')
 encodings = get_encodings()
 categorical_encodings = get_categorical_encodings()
@@ -161,7 +172,7 @@ duration = predict_duration(src_city, dst_city, stops)
 data = {}
 
 columns = [
-    "departure_time", "stops", "arrival_time", "class", "duration", "days_left", "airline_AirAsia",
+    "flight", "departure_time", "stops", "arrival_time", "class", "duration", "days_left", "airline_AirAsia",
     "airline_Air_India", "airline_GO_FIRST", "airline_Indigo", "airline_SpiceJet", "airline_Vistara", "source_city_Bangalore",
     "source_city_Chennai", "source_city_Delhi", "source_city_Hyderabad", "source_city_Kolkata", "source_city_Mumbai", "destination_city_Bangalore",
     "destination_city_Chennai", "destination_city_Delhi", "destination_city_Hyderabad", "destination_city_Kolkata",
@@ -175,8 +186,9 @@ min_price_day = None
 for i in range(days_left, -1, -1):
     data[i] = {}
     for j in airlines:
+        flight = extract_flight(j)
         airline = categorical_encode(j, categorical_encodings['airline'])
-        features = [departure_time, stops, arrival_time, seat_class, duration, i] + airline + src + dst
+        features = [flight, departure_time, stops, arrival_time, seat_class, duration, i] + airline + src + dst
         features = pd.Series(features, index=columns)
         features = features.values.reshape(1, -1)
         price = predict(model, features)[0]
@@ -194,7 +206,6 @@ print(f'Best Date: {best_date.strftime("%d/%m/%Y")}')
 fig, ax = plt.subplots(figsize=(10, 6))
 
 for airline in airlines:
-    airline = get_decoded_value(airline, encodings['airline'])
     airline_prices = [data[days][airline] for days in range(days_left, -1, -1)]
     ax.plot(range(days_left, -1, -1), airline_prices, label=airline)
 
