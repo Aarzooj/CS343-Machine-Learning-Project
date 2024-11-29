@@ -1,8 +1,6 @@
 import pickle
 import pandas as pd
-import random
 from datetime import datetime, timedelta
-import numpy as np
 import matplotlib.pyplot as plt
 
 import warnings
